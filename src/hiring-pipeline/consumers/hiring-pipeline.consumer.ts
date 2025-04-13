@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { RabbitSubscribe } from '@golevelup/nestjs-rabbitmq';
-import { NotificationService } from '../notifications/services/notification.service';
-import { NotificationType } from '../notifications/entities/notification.entity';
+import { NotificationService } from '../../notifications/services/notification.service';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 
 interface HiringEvent {
   type: string;

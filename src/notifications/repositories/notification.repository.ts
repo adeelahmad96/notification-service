@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Repository, DataSource, Between, FindOptionsWhere } from 'typeorm';
-import { Notification } from '../entities/notification.entity';
+import { Repository, DataSource, Between, FindOptionsWhere, LessThan } from 'typeorm';
+import { Notification, NotificationStatus, NotificationType } from '../entities/notification.entity';
 
 @Injectable()
 export class NotificationRepository extends Repository<Notification> {
@@ -15,7 +15,7 @@ export class NotificationRepository extends Repository<Notification> {
     });
   }
 
-  async findByStatus(status: string): Promise<Notification[]> {
+  async findByStatus(status: NotificationStatus): Promise<Notification[]> {
     return this.find({
       where: { status },
       order: { createdAt: 'DESC' },
@@ -31,18 +31,29 @@ export class NotificationRepository extends Repository<Notification> {
     });
   }
 
-  async findByTypeAndStatus(type: string, status: string): Promise<Notification[]> {
+  async findByTypeAndStatus(
+    type: NotificationType,
+    status: NotificationStatus
+  ): Promise<Notification[]> {
     return this.find({
       where: { type, status },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async findFailedNotifications(maxRetries: number = 3): Promise<Notification[]> {
+  async findPendingNotifications(): Promise<Notification[]> {
+    return this.findByStatus(NotificationStatus.PENDING);
+  }
+
+  async findFailedNotifications(): Promise<Notification[]> {
+    return this.findByStatus(NotificationStatus.FAILED);
+  }
+
+  async findRetryableNotifications(): Promise<Notification[]> {
     return this.find({
       where: {
-        status: 'FAILED',
-        retryCount: Between(0, maxRetries - 1),
+        status: NotificationStatus.FAILED,
+        retryCount: LessThan(3),
       },
       order: { createdAt: 'ASC' },
     });
@@ -50,7 +61,7 @@ export class NotificationRepository extends Repository<Notification> {
 
   async updateStatus(
     id: string,
-    status: string,
+    status: NotificationStatus,
     error?: string,
   ): Promise<void> {
     const updateData: Partial<Notification> = {
@@ -60,10 +71,15 @@ export class NotificationRepository extends Repository<Notification> {
 
     if (error) {
       updateData.error = error;
-      updateData.retryCount = () => 'retryCount + 1';
+      updateData.retryCount = await this.createQueryBuilder()
+        .select('COALESCE(retry_count, 0) + 1', 'newRetryCount')
+        .from(Notification, 'notification')
+        .where('id = :id', { id })
+        .getRawOne()
+        .then(result => result.newRetryCount);
     }
 
-    if (status === 'SENT') {
+    if (status === NotificationStatus.SENT) {
       updateData.sentAt = new Date();
     }
 
@@ -72,9 +88,20 @@ export class NotificationRepository extends Repository<Notification> {
 
   async markAsSent(id: string): Promise<void> {
     await this.update(id, {
-      status: 'SENT',
+      status: NotificationStatus.SENT,
       sentAt: new Date(),
-      updatedAt: new Date(),
+    });
+  }
+
+  async markAsFailed(id: string, error: string): Promise<void> {
+    const notification = await this.findOneOrFail({ where: { id } });
+    const retryCount = (notification.retryCount || 0) + 1;
+    const status = retryCount >= 3 ? NotificationStatus.FAILED_PERMANENT : NotificationStatus.FAILED;
+
+    await this.update(id, {
+      status,
+      error,
+      retryCount,
     });
   }
 
@@ -92,6 +119,6 @@ export class NotificationRepository extends Repository<Notification> {
     return stats.reduce((acc, curr) => {
       acc[curr.status.toLowerCase()] = parseInt(curr.count);
       return acc;
-    }, {});
+    }, {} as Record<string, number>);
   }
 } 

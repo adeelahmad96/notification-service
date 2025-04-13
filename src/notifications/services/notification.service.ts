@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Notification } from '../entities/notification.entity';
+import { Notification, NotificationStatus, NotificationType } from '../entities/notification.entity';
 import { NotificationChannelFactory, RecipientRole } from '../factories/notification-channel.factory';
 import { NotificationPayload } from '../interfaces/notification-channel.interface';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
+import { RabbitMQService } from './rabbitmq.service';
+import { NotificationRepository } from '../repositories/notification.repository';
 
 @Injectable()
 export class NotificationService {
@@ -12,9 +14,37 @@ export class NotificationService {
 
   constructor(
     @InjectRepository(Notification)
-    private notificationRepository: Repository<Notification>,
-    private notificationChannelFactory: NotificationChannelFactory,
+    private readonly notificationRepository: NotificationRepository,
+    private readonly notificationChannelFactory: NotificationChannelFactory,
+    private readonly rabbitMQService: RabbitMQService,
   ) {}
+
+  async createNotification(notificationData: Partial<Notification>): Promise<Notification> {
+    const notification = this.notificationRepository.create(notificationData);
+    const savedNotification = await this.notificationRepository.save(notification);
+    
+    try {
+      if (!this.rabbitMQService.isReady()) {
+        this.logger.warn('RabbitMQ service not ready, notification will be processed later');
+        return savedNotification;
+      }
+
+      // Publish to RabbitMQ for processing
+      await this.rabbitMQService.publish('hiring', 'notification.created', {
+        notificationId: savedNotification.id,
+        type: savedNotification.type,
+        recipientId: savedNotification.recipientId,
+      });
+      
+      this.logger.debug(`Notification ${savedNotification.id} published to RabbitMQ`);
+    } catch (error) {
+      this.logger.error(`Failed to publish notification ${savedNotification.id} to RabbitMQ`, error);
+      // Don't throw the error, just log it and continue
+      // The notification will be processed later when RabbitMQ is available
+    }
+    
+    return savedNotification;
+  }
 
   async sendNotification(notification: Notification): Promise<void> {
     this.logger.debug(`Processing notification ${notification.id}`);
@@ -39,9 +69,19 @@ export class NotificationService {
       // Send through all appropriate channels
       await Promise.all(channels.map(channel => channel.send(payload)));
 
+      // Publish to RabbitMQ
+      const channel = this.rabbitMQService.getChannel();
+      await channel.publish('hiring', 'notification.sent', {
+        notificationId: notification.id,
+        type: notification.type,
+        recipientId: notification.recipientId,
+        status: NotificationStatus.SENT,
+        timestamp: new Date(),
+      });
+
       // Update notification status
       await this.notificationRepository.update(notification.id, {
-        status: 'SENT',
+        status: NotificationStatus.SENT,
         sentAt: new Date(),
       });
 
@@ -52,22 +92,58 @@ export class NotificationService {
       );
 
       await this.notificationRepository.update(notification.id, {
-        status: 'FAILED',
+        status: NotificationStatus.FAILED,
         error: error instanceof Error ? error.message : 'Unknown error',
-        retryCount: () => 'retryCount + 1',
+        retryCount: () => 'CASE WHEN retry_count IS NULL THEN 1 ELSE retry_count + 1 END',
       });
 
       throw error;
     }
   }
 
-  async createNotification(dto: CreateNotificationDto): Promise<Notification> {
+  async create(createNotificationDto: CreateNotificationDto): Promise<Notification> {
     const notification = this.notificationRepository.create({
-      ...dto,
-      status: 'PENDING',
+      ...createNotificationDto,
+      status: NotificationStatus.PENDING,
+    });
+    return this.notificationRepository.save(notification);
+  }
+
+  async findAll(): Promise<Notification[]> {
+    return this.notificationRepository.find();
+  }
+
+  async findOne(id: string): Promise<Notification> {
+    return this.notificationRepository.findOneOrFail({ where: { id } });
+  }
+
+  async findByRecipientId(recipientId: string): Promise<Notification[]> {
+    return this.notificationRepository.find({
+      where: { recipientId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async markAsSent(id: string): Promise<Notification> {
+    await this.notificationRepository.update(id, {
+      status: NotificationStatus.SENT,
+      sentAt: new Date(),
+    });
+    return this.findOne(id);
+  }
+
+  async markAsFailed(id: string, error: string): Promise<Notification> {
+    const notification = await this.findOne(id);
+    const retryCount = (notification.retryCount || 0) + 1;
+    const status = retryCount >= 3 ? NotificationStatus.FAILED_PERMANENT : NotificationStatus.FAILED;
+
+    await this.notificationRepository.update(id, {
+      status,
+      error,
+      retryCount,
     });
 
-    return this.notificationRepository.save(notification);
+    return this.findOne(id);
   }
 
   private determineRecipientRole(notification: Notification): RecipientRole {

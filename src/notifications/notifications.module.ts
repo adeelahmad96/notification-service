@@ -2,24 +2,25 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Notification } from './entities/notification.entity';
 import { NotificationService } from './services/notification.service';
-import { NotificationConsumer } from './consumers/notification.consumer';
+import { NotificationController } from '../controllers/notification.controller';
+import { ConfigService } from '@nestjs/config';
+import { NotificationChannelFactory } from './factories/notification-channel.factory';
 import { EmailChannelAdapter } from './adapters/email-channel.adapter';
 import { ConsoleChannelAdapter } from './adapters/console-channel.adapter';
-import { NotificationChannelFactory } from './factories/notification-channel.factory';
-import { NotificationRepository } from './repositories/notification.repository';
+import { RabbitMQService } from './services/rabbitmq.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification]),
   ],
+  controllers: [NotificationController],
   providers: [
     NotificationService,
+    NotificationChannelFactory,
     EmailChannelAdapter,
     ConsoleChannelAdapter,
-    NotificationChannelFactory,
-    NotificationRepository,
+    RabbitMQService,
   ],
-  controllers: [NotificationConsumer],
-  exports: [NotificationService, NotificationRepository],
+  exports: [NotificationService],
 })
 export class NotificationsModule {} 

@@ -19,6 +19,26 @@ The service:
 - Sends notifications via configured channels
 - Stores state in PostgreSQL
 
+## Scalability & Fault Tolerance
+
+1. **Horizontal Scaling**
+   - Stateless service design
+   - Multiple instances can run in parallel
+   - RabbitMQ handles message distribution
+   - PostgreSQL handles shared state
+
+2. **Fault Tolerance**
+   - Message acknowledgments prevent lost events
+   - Dead letter queues for failed messages
+   - Automatic retry mechanism
+   - Error tracking and logging
+
+3. **High Availability**
+   - No single point of failure
+   - Automatic failover
+   - Load balancing ready
+   - Health checks implemented
+
 ## Database Schema
 
 ### notifications
@@ -74,17 +94,26 @@ CREATE TABLE notification_templates (
 
 ## Design Choices
 
-1. **RabbitMQ**
+1. **Event Processing (RabbitMQ)**
    - Reliable message delivery
-   - Dead letter support for failed messages
-   - Easy horizontal scaling
+   - Dead letter support
+   - Horizontal scaling support
+   - Message persistence
 
-2. **Templates**
-   - Stored in database for easy updates
+2. **Templates & Rules**
+   - Database-stored for easy updates
    - Version control built-in
-   - Supports both text and HTML formats
+   - Support for multiple formats
+   - Rule-based routing
 
 3. **Error Handling**
-   - Automatic retries for failed notifications
-   - Error tracking and logging
-   - Dead letter queue for undeliverable messages
+   - Automatic retries
+   - Error tracking
+   - Dead letter queues
+   - Status monitoring
+
+4. **Monitoring & Observability**
+   - Health check endpoints
+   - Status tracking
+   - Error logging
+   - Performance metrics

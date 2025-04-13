@@ -20,6 +20,7 @@
     "db:rollback": "npm run migration:revert"
   },
   "dependencies": {
+    "@golevelup/nestjs-rabbitmq": "^5.7.0",
     "@nestjs/bull": "^11.0.2",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.0.0",

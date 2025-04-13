@@ -76,6 +76,50 @@ npm run test:e2e
 
 Swagger docs are available at `/api/docs` when running in development mode.
 
+## Implementation Details
+
+### Core Features
+- Event-driven architecture using RabbitMQ
+- Email notifications with templates
+- Retry mechanism for failed notifications
+- Database persistence with PostgreSQL
+- RESTful API with Swagger documentation
+
+### Assumptions Made
+1. Email is the primary notification channel
+2. Templates are stored in the database
+3. Failed notifications should be retried automatically
+4. Events come from a hiring pipeline system
+5. Each notification belongs to one recipient
+
+## Future Improvements
+
+Given more time, these areas could be enhanced:
+
+1. **Additional Features**
+   - SMS notifications support
+   - In-app notifications
+   - Webhook support for third-party integrations
+   - Batch notification processing
+
+2. **Technical Enhancements**
+   - GraphQL API alongside REST
+   - Real-time notification status updates
+   - Advanced template system with versioning
+   - Performance optimization for high load
+
+3. **Operational Improvements**
+   - Kubernetes deployment manifests
+   - CI/CD pipeline setup
+   - Monitoring dashboard
+   - Performance metrics collection
+
+4. **Security Enhancements**
+   - Rate limiting
+   - Advanced authentication
+   - Audit logging
+   - Security scanning
+
 ## Contributing
 
 1. Fork the repo

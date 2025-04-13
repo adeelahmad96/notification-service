@@ -1,10 +1,5 @@
-import { IsString, IsUUID, IsEmail, IsOptional, IsEnum, IsObject } from 'class-validator';
-
-export enum NotificationType {
-  APPLICATION_RECEIVED = 'APPLICATION_RECEIVED',
-  INTERVIEW_SCHEDULED = 'INTERVIEW_SCHEDULED',
-  OFFER_EXTENDED = 'OFFER_EXTENDED',
-}
+import { IsString, IsUUID, IsEmail, IsOptional, IsEnum } from 'class-validator';
+import { NotificationType } from '../entities/notification.entity';
 
 export class CreateNotificationDto {
   @IsEnum(NotificationType)
@@ -14,7 +9,8 @@ export class CreateNotificationDto {
   recipientId: string;
 
   @IsEmail()
-  recipientEmail: string;
+  @IsOptional()
+  recipientEmail?: string;
 
   @IsString()
   subject: string;
@@ -26,7 +22,6 @@ export class CreateNotificationDto {
   @IsOptional()
   htmlContent?: string;
 
-  @IsObject()
   @IsOptional()
   metadata?: Record<string, any>;
 } 
