@@ -1,13 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Notification } from './entities/notification.entity';
-import { NotificationService } from './services/notification.service';
-import { NotificationController } from '../controllers/notification.controller';
-import { ConfigService } from '@nestjs/config';
-import { NotificationChannelFactory } from './factories/notification-channel.factory';
-import { EmailChannelAdapter } from './adapters/email-channel.adapter';
-import { ConsoleChannelAdapter } from './adapters/console-channel.adapter';
-import { RabbitMQService } from './services/rabbitmq.service';
+import { Notification } from '../domain/entities/notification.entity';
+import { NotificationController } from '../application/controllers/notification.controller';
+import { NotificationService } from '../application/services/notification.service';
+import { NotificationRepository } from '../infrastructure/repositories/notification.repository';
+import { NotificationChannelFactory } from '../domain/factories/notification-channel.factory';
+import { EmailAdapter } from '../infrastructure/adapters/email.adapter';
+import { ConsoleAdapter } from '../infrastructure/adapters/console.adapter';
+import { RabbitMQService } from '../infrastructure/messaging/rabbitmq.service';
 
 @Module({
   imports: [
@@ -16,11 +16,24 @@ import { RabbitMQService } from './services/rabbitmq.service';
   controllers: [NotificationController],
   providers: [
     NotificationService,
+    NotificationRepository,
     NotificationChannelFactory,
-    EmailChannelAdapter,
-    ConsoleChannelAdapter,
+    EmailAdapter,
+    ConsoleAdapter,
     RabbitMQService,
   ],
   exports: [NotificationService],
 })
-export class NotificationsModule {} 
+export class NotificationsModule implements OnModuleInit {
+  constructor(
+    private readonly channelFactory: NotificationChannelFactory,
+    private readonly emailAdapter: EmailAdapter,
+    private readonly consoleAdapter: ConsoleAdapter,
+  ) {}
+
+  onModuleInit() {
+    // Register available notification channels
+    this.channelFactory.registerChannel(this.emailAdapter);
+    this.channelFactory.registerChannel(this.consoleAdapter);
+  }
+} 
